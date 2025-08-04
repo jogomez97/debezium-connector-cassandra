@@ -21,13 +21,15 @@ import org.slf4j.LoggerFactory;
 import io.debezium.DebeziumException;
 import io.debezium.connector.base.ChangeEventQueue;
 import io.debezium.connector.cassandra.exceptions.CassandraConnectorTaskException;
+import io.debezium.connector.cassandra.metrics.CassandraStreamingMetrics;
 
 public class CommitLogIdxParser {
     private static final Logger LOGGER = LoggerFactory.getLogger(CommitLogIdxParser.class);
 
     private final CommitLogSegmentReader commitLogReader;
     private final List<ChangeEventQueue<Event>> queues;
-    private final CommitLogProcessorMetrics metrics;
+    private final CassandraStreamingMetrics metrics;
+    private final CommitLogProcessorMetrics legacyMetrics;
 
     private final CommitLogTransfer commitLogTransfer;
     private final Set<String> erroneousCommitLogs;
@@ -37,11 +39,13 @@ public class CommitLogIdxParser {
     private final boolean realTimeProcessingEnabled;
     private Integer offset;
 
-    public CommitLogIdxParser(LogicalCommitLog commitLog, final CommitLogProcessorMetrics metrics,
+    public CommitLogIdxParser(LogicalCommitLog commitLog, final CassandraStreamingMetrics metrics,
+                              final CommitLogProcessorMetrics legacyMetrics,
                               final CassandraConnectorContext context,
                               CommitLogSegmentReader commitLogReader) {
         this.queues = context.getQueues();
         this.metrics = metrics;
+        this.legacyMetrics = legacyMetrics;
         this.commitLog = commitLog;
         this.commitLogReader = commitLogReader;
         this.commitLogTransfer = context.getCassandraConnectorConfig().getCommitLogTransfer();
@@ -81,6 +85,7 @@ public class CommitLogIdxParser {
 
                     if (commitLogPosition != null) {
                         metrics.setCommitLogPosition(commitLogPosition);
+                        legacyMetrics.setCommitLogPosition(commitLogPosition);
                         processCommitLog(commitLog, commitLogPosition);
                         offset = commitLog.offsetOfEndOfLastWrittenCDCMutation;
                     }
@@ -94,6 +99,7 @@ public class CommitLogIdxParser {
             LOGGER.info("Completed idx file for: {}", commitLog);
             int commitLogPosition = offset == null ? 0 : offset;
             metrics.setCommitLogPosition(commitLogPosition);
+            legacyMetrics.setCommitLogPosition(commitLogPosition);
             processCommitLog(commitLog, commitLogPosition);
             return new CommitLogProcessingResult(commitLog);
         }
@@ -111,7 +117,9 @@ public class CommitLogIdxParser {
 
         LOGGER.info("Processing commit log {}", commitLog.log.toString());
         metrics.setCommitLogFilename(commitLog.log.toString());
+        legacyMetrics.setCommitLogFilename(commitLog.log.toString());
         metrics.setCommitLogPosition(0);
+        legacyMetrics.setCommitLogPosition(0);
 
         CommitLogProcessingResult result = parse();
         if (result.result == OK || result.result == ERROR) {

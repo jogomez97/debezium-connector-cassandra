@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import io.debezium.DebeziumException;
 import io.debezium.connector.base.ChangeEventQueue;
 import io.debezium.connector.cassandra.exceptions.CassandraConnectorTaskException;
+import io.debezium.connector.cassandra.metrics.CassandraStreamingMetrics;
 
 /**
  * The {@link CommitLogProcessor} is used to process CommitLog in CDC directory.
@@ -41,14 +42,15 @@ public class CommitLogProcessor extends AbstractProcessor {
     private AbstractDirectoryWatcher watcher;
     private final List<ChangeEventQueue<Event>> queues;
     private final boolean latestOnly;
-    private final CommitLogProcessorMetrics metrics;
+    private final CassandraStreamingMetrics metrics;
+    private final CommitLogProcessorMetrics legacyMetrics;
     private boolean initial = true;
     private final boolean errorCommitLogReprocessEnabled;
     private final CommitLogTransfer commitLogTransfer;
     private final Set<String> erroneousCommitLogs;
     private final File commitLogDir;
 
-    public CommitLogProcessor(CassandraConnectorContext context, CommitLogProcessorMetrics metrics,
+    public CommitLogProcessor(CassandraConnectorContext context, CassandraStreamingMetrics metrics, CommitLogProcessorMetrics legacyMetrics,
                               CommitLogSegmentReader commitLogReader, File cdcDir,
                               File commitLogDir) {
         super(NAME, Duration.ZERO);
@@ -56,6 +58,7 @@ public class CommitLogProcessor extends AbstractProcessor {
         this.queues = context.getQueues();
         this.context = context;
         this.metrics = metrics;
+        this.legacyMetrics = legacyMetrics;
         this.cdcDir = cdcDir;
         latestOnly = this.context.getCassandraConnectorConfig().latestCommitLogOnly();
         errorCommitLogReprocessEnabled = this.context.getCassandraConnectorConfig().errorCommitLogReprocessEnabled();
@@ -67,11 +70,13 @@ public class CommitLogProcessor extends AbstractProcessor {
     @Override
     public void initialize() {
         metrics.registerMetrics();
+        legacyMetrics.registerMetrics();
     }
 
     @Override
     public void destroy() {
         metrics.unregisterMetrics();
+        legacyMetrics.unregisterMetrics();
     }
 
     @Override
@@ -127,6 +132,7 @@ public class CommitLogProcessor extends AbstractProcessor {
             try {
                 LOGGER.info("Processing commit log {}", file.getName());
                 metrics.setCommitLogFilename(file.getName());
+                legacyMetrics.setCommitLogFilename(file.getName());
                 commitLogReader.readCommitLogSegment(file, -1L, 0);
                 if (!latestOnly) {
                     queues.get(Math.abs(file.getName().hashCode() % queues.size())).enqueue(new EOFEvent(file));

@@ -16,6 +16,15 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.codahale.metrics.Gauge;
 
+/**
+ * Legacy metrics class for snapshot processing.
+ *
+ * @deprecated Use {@link io.debezium.connector.cassandra.metrics.CassandraSnapshotMetrics} instead.
+ * This class uses non-standard JMX naming conventions that differ from other Debezium connectors.
+ * The new CassandraSnapshotMetrics follows the standard Debezium pattern:
+ * debezium.cassandra:type=connector-metrics,context=snapshot,server=&lt;logical-name&gt;
+ */
+@Deprecated
 public class SnapshotProcessorMetrics {
     private final AtomicInteger tableCount = new AtomicInteger();
     private final AtomicInteger remainingTableCount = new AtomicInteger();

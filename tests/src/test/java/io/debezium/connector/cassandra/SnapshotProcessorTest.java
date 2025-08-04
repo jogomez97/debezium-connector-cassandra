@@ -31,8 +31,10 @@ import org.mockito.Mockito;
 
 import io.debezium.config.Configuration;
 import io.debezium.connector.base.ChangeEventQueue;
+import io.debezium.connector.cassandra.metrics.CassandraSnapshotMetrics;
 import io.debezium.connector.cassandra.spi.ProvidersResolver;
 import io.debezium.connector.cassandra.utils.TestUtils;
+import io.debezium.connector.common.CdcSourceTaskContext;
 
 public class SnapshotProcessorTest extends CassandraConnectorTestBase {
 
@@ -51,7 +53,9 @@ public class SnapshotProcessorTest extends CassandraConnectorTestBase {
     @Test
     public void testSnapshotTable() throws Throwable {
         context = provider.provideContext(Configuration.from(TestUtils.generateDefaultConfigMap()));
-        SnapshotProcessor snapshotProcessor = Mockito.spy(new SnapshotProcessor(context, context.getClusterName()));
+        CassandraSnapshotMetrics snapshotMetrics = new CassandraSnapshotMetrics((CdcSourceTaskContext) context);
+        SnapshotProcessorMetrics legacySnapshotMetrics = new SnapshotProcessorMetrics();
+        SnapshotProcessor snapshotProcessor = Mockito.spy(new SnapshotProcessor(context, context.getClusterName(), snapshotMetrics, legacySnapshotMetrics));
         when(snapshotProcessor.isRunning()).thenReturn(true);
 
         int tableSize = 5;
@@ -93,7 +97,9 @@ public class SnapshotProcessorTest extends CassandraConnectorTestBase {
     @Test
     public void testSnapshotSkipsNonCdcEnabledTable() throws Throwable {
         context = provider.provideContext(Configuration.from(TestUtils.generateDefaultConfigMap()));
-        SnapshotProcessor snapshotProcessor = Mockito.spy(new SnapshotProcessor(context, context.getClusterName()));
+        CassandraSnapshotMetrics snapshotMetrics = new CassandraSnapshotMetrics((CdcSourceTaskContext) context);
+        SnapshotProcessorMetrics legacySnapshotMetrics = new SnapshotProcessorMetrics();
+        SnapshotProcessor snapshotProcessor = Mockito.spy(new SnapshotProcessor(context, context.getClusterName(), snapshotMetrics, legacySnapshotMetrics));
         when(snapshotProcessor.isRunning()).thenReturn(true);
 
         int tableSize = 5;
@@ -115,7 +121,9 @@ public class SnapshotProcessorTest extends CassandraConnectorTestBase {
     public void testSnapshotEmptyTable() throws Throwable {
         context = provider.provideContext(Configuration.from(TestUtils.generateDefaultConfigMap()));
         AtomicBoolean globalTaskState = new AtomicBoolean(true);
-        SnapshotProcessor snapshotProcessor = Mockito.spy(new SnapshotProcessor(context, context.getClusterName()));
+        CassandraSnapshotMetrics snapshotMetrics = new CassandraSnapshotMetrics((CdcSourceTaskContext) context);
+        SnapshotProcessorMetrics legacySnapshotMetrics = new SnapshotProcessorMetrics();
+        SnapshotProcessor snapshotProcessor = Mockito.spy(new SnapshotProcessor(context, context.getClusterName(), snapshotMetrics, legacySnapshotMetrics));
         when(snapshotProcessor.isRunning()).thenReturn(true);
 
         context.getCassandraClient().execute("CREATE TABLE IF NOT EXISTS " + keyspaceTable("cdc_table") + " (a int, b text, PRIMARY KEY(a)) WITH cdc = true;");
@@ -146,7 +154,9 @@ public class SnapshotProcessorTest extends CassandraConnectorTestBase {
 
         context = provider.provideContext(Configuration.from(configs));
 
-        SnapshotProcessor snapshotProcessorSpy = Mockito.spy(new SnapshotProcessor(context, context.getClusterName()));
+        CassandraSnapshotMetrics snapshotMetrics = new CassandraSnapshotMetrics((CdcSourceTaskContext) context);
+        SnapshotProcessorMetrics legacySnapshotMetrics = new SnapshotProcessorMetrics();
+        SnapshotProcessor snapshotProcessorSpy = Mockito.spy(new SnapshotProcessor(context, context.getClusterName(), snapshotMetrics, legacySnapshotMetrics));
         doNothing().when(snapshotProcessorSpy).snapshot();
 
         for (int i = 0; i < 5; i++) {
@@ -161,7 +171,9 @@ public class SnapshotProcessorTest extends CassandraConnectorTestBase {
         configs.put(CassandraConnectorConfig.SNAPSHOT_MODE.name(), "initial");
         configs.put(CassandraConnectorConfig.SNAPSHOT_POLL_INTERVAL_MS.name(), "0");
         context = provider.provideContext(Configuration.from(configs));
-        SnapshotProcessor snapshotProcessorSpy = Mockito.spy(new SnapshotProcessor(context, context.getClusterName()));
+        CassandraSnapshotMetrics snapshotMetrics = new CassandraSnapshotMetrics((CdcSourceTaskContext) context);
+        SnapshotProcessorMetrics legacySnapshotMetrics = new SnapshotProcessorMetrics();
+        SnapshotProcessor snapshotProcessorSpy = Mockito.spy(new SnapshotProcessor(context, context.getClusterName(), snapshotMetrics, legacySnapshotMetrics));
         doNothing().when(snapshotProcessorSpy).snapshot();
 
         for (int i = 0; i < 5; i++) {
@@ -176,7 +188,9 @@ public class SnapshotProcessorTest extends CassandraConnectorTestBase {
         configs.put(CassandraConnectorConfig.SNAPSHOT_MODE.name(), "never");
         configs.put(CassandraConnectorConfig.SNAPSHOT_POLL_INTERVAL_MS.name(), "0");
         context = provider.provideContext(Configuration.from(configs));
-        SnapshotProcessor snapshotProcessorSpy = Mockito.spy(new SnapshotProcessor(context, context.getClusterName()));
+        CassandraSnapshotMetrics snapshotMetrics = new CassandraSnapshotMetrics((CdcSourceTaskContext) context);
+        SnapshotProcessorMetrics legacySnapshotMetrics = new SnapshotProcessorMetrics();
+        SnapshotProcessor snapshotProcessorSpy = Mockito.spy(new SnapshotProcessor(context, context.getClusterName(), snapshotMetrics, legacySnapshotMetrics));
         doNothing().when(snapshotProcessorSpy).snapshot();
 
         for (int i = 0; i < 5; i++) {

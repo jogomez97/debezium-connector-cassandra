@@ -24,6 +24,8 @@ import org.apache.commons.math3.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.debezium.connector.cassandra.metrics.CassandraStreamingMetrics;
+
 /**
  * The {@link CommitLogIdxProcessor} is used to process CommitLog in CDC directory.
  * Upon readCommitLog, it processes the entire CommitLog specified in the {@link CassandraConnectorConfig}
@@ -38,7 +40,8 @@ public class CommitLogIdxProcessor extends AbstractProcessor {
     private final CassandraConnectorContext context;
     private final File cdcDir;
     private AbstractDirectoryWatcher watcher;
-    private final CommitLogProcessorMetrics metrics;
+    private final CassandraStreamingMetrics metrics;
+    private final CommitLogProcessorMetrics legacyMetrics;
     private boolean initial = true;
     private final boolean errorCommitLogReprocessEnabled;
     private final CommitLogTransfer commitLogTransfer;
@@ -46,8 +49,8 @@ public class CommitLogIdxProcessor extends AbstractProcessor {
     final static Set<Pair<CommitLogIdxParser, Future<CommitLogProcessingResult>>> submittedProcessings = ConcurrentHashMap.newKeySet();
     private final CommitLogSegmentReader commitLogReader;
 
-    public CommitLogIdxProcessor(CassandraConnectorContext context, CommitLogProcessorMetrics metrics,
-                                 CommitLogSegmentReader commitLogReader, File cdcDir) {
+    public CommitLogIdxProcessor(CassandraConnectorContext context, CassandraStreamingMetrics metrics,
+                                 CommitLogProcessorMetrics legacyMetrics, CommitLogSegmentReader commitLogReader, File cdcDir) {
         super(NAME, Duration.ZERO);
         this.context = context;
         commitLogTransfer = this.context.getCassandraConnectorConfig().getCommitLogTransfer();
@@ -55,17 +58,20 @@ public class CommitLogIdxProcessor extends AbstractProcessor {
         this.cdcDir = cdcDir;
         executorService = Executors.newSingleThreadExecutor();
         this.metrics = metrics;
+        this.legacyMetrics = legacyMetrics;
         this.commitLogReader = commitLogReader;
     }
 
     @Override
     public void initialize() {
         metrics.registerMetrics();
+        legacyMetrics.registerMetrics();
     }
 
     @Override
     public void destroy() {
         metrics.unregisterMetrics();
+        legacyMetrics.unregisterMetrics();
     }
 
     @Override
@@ -96,7 +102,7 @@ public class CommitLogIdxProcessor extends AbstractProcessor {
     }
 
     public void submit(Path index) {
-        final CommitLogIdxParser parser = new CommitLogIdxParser(new LogicalCommitLog(index.toFile()), metrics,
+        final CommitLogIdxParser parser = new CommitLogIdxParser(new LogicalCommitLog(index.toFile()), metrics, legacyMetrics,
                 this.context, commitLogReader);
         Future<CommitLogProcessingResult> future = executorService.submit(parser::process);
         submittedProcessings.add(new Pair<>(parser, future));

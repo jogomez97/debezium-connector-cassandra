@@ -33,8 +33,10 @@ import io.debezium.config.Configuration;
 import io.debezium.connector.base.ChangeEventQueue;
 import io.debezium.connector.cassandra.exceptions.CassandraConnectorConfigException;
 import io.debezium.connector.cassandra.exceptions.CassandraConnectorTaskException;
+import io.debezium.connector.cassandra.metrics.CassandraSnapshotMetrics;
 import io.debezium.connector.cassandra.network.BuildInfoServlet;
 import io.debezium.connector.cassandra.transforms.CassandraTypeDeserializer;
+import io.debezium.connector.common.CdcSourceTaskContext;
 
 public class CassandraConnectorTaskTemplate {
 
@@ -111,6 +113,7 @@ public class CassandraConnectorTaskTemplate {
         taskContext = new DefaultCassandraConnectorContext(config, schemaLoader, schemaChangeListenerProvider, factory.offsetWriter(config));
 
         LOGGER.info("Starting processor group ...");
+        // Create standard streaming metrics following Debezium naming conventions
         AbstractProcessor[] processors = cassandraSpecificProcessors.getProcessors(taskContext);
         processorGroup = initProcessorGroup(taskContext, factory.recordEmitter(taskContext), processors);
         processorGroup.start();
@@ -154,7 +157,14 @@ public class CassandraConnectorTaskTemplate {
                 processorGroup.addProcessor(processor);
             }
 
-            processorGroup.addProcessor(new SnapshotProcessor(taskContext, taskContext.getClusterName()));
+            // Create standard snapshot metrics following Debezium naming conventions
+            CassandraSnapshotMetrics snapshotMetrics = new CassandraSnapshotMetrics((CdcSourceTaskContext) taskContext);
+
+            // Create legacy snapshot metrics for backward compatibility during transition
+            SnapshotProcessorMetrics legacySnapshotMetrics = new SnapshotProcessorMetrics();
+
+            processorGroup.addProcessor(new SnapshotProcessor(taskContext, taskContext.getClusterName(),
+                    snapshotMetrics, legacySnapshotMetrics));
             List<ChangeEventQueue<Event>> queues = taskContext.getQueues();
             for (int i = 0; i < queues.size(); i++) {
                 processorGroup.addProcessor(new QueueProcessor(taskContext, i, recordEmitter));

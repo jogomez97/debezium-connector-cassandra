@@ -38,6 +38,7 @@ import io.debezium.DebeziumException;
 import io.debezium.connector.base.ChangeEventQueue;
 import io.debezium.connector.cassandra.CassandraSchemaFactory.CellData;
 import io.debezium.connector.cassandra.CassandraSchemaFactory.RowData;
+import io.debezium.connector.cassandra.metrics.CassandraSnapshotMetrics;
 import io.debezium.connector.cassandra.transforms.CassandraTypeDeserializer;
 import io.debezium.time.Conversions;
 import io.debezium.util.Collect;
@@ -71,11 +72,13 @@ public class SnapshotProcessor extends AbstractProcessor {
     private final CassandraConnectorConfig.SnapshotMode snapshotMode;
     private final ConsistencyLevel consistencyLevel;
     private final Set<String> startedTableNames = new HashSet<>();
-    private final SnapshotProcessorMetrics metrics = new SnapshotProcessorMetrics();
+    private final CassandraSnapshotMetrics metrics;
+    private final SnapshotProcessorMetrics legacyMetrics;
     private boolean initial = true;
     private final String clusterName;
 
-    public SnapshotProcessor(CassandraConnectorContext context, String clusterName) {
+    public SnapshotProcessor(CassandraConnectorContext context, String clusterName,
+                             CassandraSnapshotMetrics metrics, SnapshotProcessorMetrics legacyMetrics) {
         super(NAME, context.getCassandraConnectorConfig().snapshotPollInterval());
         this.queues = context.getQueues();
         cassandraClient = context.getCassandraClient();
@@ -87,16 +90,20 @@ public class SnapshotProcessor extends AbstractProcessor {
         snapshotMode = context.getCassandraConnectorConfig().snapshotMode();
         consistencyLevel = context.getCassandraConnectorConfig().snapshotConsistencyLevel();
         this.clusterName = clusterName;
+        this.metrics = metrics;
+        this.legacyMetrics = legacyMetrics;
     }
 
     @Override
     public void initialize() {
         metrics.registerMetrics();
+        legacyMetrics.registerMetrics();
     }
 
     @Override
     public void destroy() {
         metrics.unregisterMetrics();
+        legacyMetrics.unregisterMetrics();
     }
 
     @Override
@@ -124,7 +131,9 @@ public class SnapshotProcessor extends AbstractProcessor {
             LOGGER.debug("Found {} tables to snapshot: {}", tables.size(), tableArr);
             long startTime = System.currentTimeMillis();
             metrics.setTableCount(tables.size());
+            legacyMetrics.setTableCount(tables.size());
             metrics.startSnapshot();
+            legacyMetrics.startSnapshot();
             for (TableMetadata table : tables) {
                 if (isRunning()) {
                     String tableName = tableName(table);
@@ -132,10 +141,12 @@ public class SnapshotProcessor extends AbstractProcessor {
                     startedTableNames.add(tableName);
                     takeTableSnapshot(table);
                     metrics.completeTable();
+                    legacyMetrics.completeTable();
                     LOGGER.info("Snapshot of table {} has been taken", tableName);
                 }
             }
             metrics.stopSnapshot();
+            legacyMetrics.stopSnapshot();
             long endTime = System.currentTimeMillis();
             long durationInSeconds = Duration.ofMillis(endTime - startTime).getSeconds();
             LOGGER.debug("Snapshot completely queued in {} seconds for tables: {}", durationInSeconds, tableArr);
@@ -263,15 +274,18 @@ public class SnapshotProcessor extends AbstractProcessor {
                 if (rowNum % 10_000 == 0) {
                     LOGGER.debug("Queued {} snapshot records from table {}", rowNum, tableName);
                     metrics.setRowsScanned(tableName, rowNum);
+                    legacyMetrics.setRowsScanned(tableName, rowNum);
                 }
             }
             else {
                 LOGGER.warn("Terminated snapshot processing while table {} is in progress", tableName);
                 metrics.setRowsScanned(tableName, rowNum);
+                legacyMetrics.setRowsScanned(tableName, rowNum);
                 return;
             }
         }
         metrics.setRowsScanned(tableName, rowNum);
+        legacyMetrics.setRowsScanned(tableName, rowNum);
     }
 
     /**

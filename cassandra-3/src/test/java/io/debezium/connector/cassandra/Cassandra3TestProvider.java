@@ -13,9 +13,11 @@ import org.apache.cassandra.db.commitlog.CommitLogReadHandler;
 import org.apache.cassandra.db.commitlog.CommitLogReader;
 
 import io.debezium.config.Configuration;
+import io.debezium.connector.cassandra.metrics.CassandraStreamingMetrics;
 import io.debezium.connector.cassandra.spi.CassandraTestProvider;
 import io.debezium.connector.cassandra.spi.CommitLogProcessing;
 import io.debezium.connector.cassandra.transforms.CassandraTypeDeserializer;
+import io.debezium.connector.common.CdcSourceTaskContext;
 
 public class Cassandra3TestProvider implements CassandraTestProvider {
     @Override
@@ -29,8 +31,9 @@ public class Cassandra3TestProvider implements CassandraTestProvider {
         private final CommitLogSegmentReader commitLogSegmentReader;
 
         Cassandra3CommitLogProcessing(CassandraConnectorContext context, CommitLogProcessorMetrics metrics) {
-            commitLogReadHandler = new Cassandra3CommitLogReadHandlerImpl(context, metrics);
-            commitLogSegmentReader = new Cassandra3CommitLogSegmentReader(context, metrics);
+            CassandraStreamingMetrics streamingMetrics = new CassandraStreamingMetrics((CdcSourceTaskContext) context);
+            commitLogReadHandler = new Cassandra3CommitLogReadHandlerImpl(context, streamingMetrics, metrics);
+            commitLogSegmentReader = new Cassandra3CommitLogSegmentReader(context, streamingMetrics, metrics);
         }
 
         @Override

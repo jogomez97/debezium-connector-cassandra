@@ -12,6 +12,15 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 
+/**
+ * Legacy metrics class for commit log processing.
+ *
+ * @deprecated Use {@link io.debezium.connector.cassandra.metrics.CassandraStreamingMetrics} instead.
+ * This class uses non-standard JMX naming conventions that differ from other Debezium connectors.
+ * The new CassandraStreamingMetrics follows the standard Debezium pattern:
+ * debezium.cassandra:type=connector-metrics,context=streaming,server=&lt;logical-name&gt;
+ */
+@Deprecated
 public class CommitLogProcessorMetrics {
     private String commitLogFilename = null;
     private final AtomicLong commitLogPosition = new AtomicLong(-1L);

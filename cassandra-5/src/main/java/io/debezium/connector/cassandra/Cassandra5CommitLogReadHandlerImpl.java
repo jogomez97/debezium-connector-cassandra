@@ -57,6 +57,7 @@ import io.debezium.connector.cassandra.CassandraSchemaFactory.CellData;
 import io.debezium.connector.cassandra.CassandraSchemaFactory.RangeData;
 import io.debezium.connector.cassandra.CassandraSchemaFactory.RowData;
 import io.debezium.connector.cassandra.exceptions.CassandraConnectorSchemaException;
+import io.debezium.connector.cassandra.metrics.CassandraStreamingMetrics;
 import io.debezium.connector.cassandra.transforms.CassandraTypeDeserializer;
 import io.debezium.time.Conversions;
 
@@ -76,19 +77,21 @@ public class Cassandra5CommitLogReadHandlerImpl implements CommitLogReadHandler 
     private final RecordMaker recordMaker;
     private final OffsetWriter offsetWriter;
     private final SchemaHolder schemaHolder;
-    private final CommitLogProcessorMetrics metrics;
+    private final CassandraStreamingMetrics metrics;
+    private final CommitLogProcessorMetrics legacyMetrics;
     private final RangeTombstoneContext<org.apache.cassandra.schema.TableMetadata> rangeTombstoneContext = new RangeTombstoneContext<>();
     private final CassandraSchemaFactory schemaFactory;
     private final CassandraConnectorConfig.EventOrderGuaranteeMode eventOrderGuaranteeMode;
 
-    Cassandra5CommitLogReadHandlerImpl(CassandraConnectorContext context, CommitLogProcessorMetrics metrics) {
+    Cassandra5CommitLogReadHandlerImpl(CassandraConnectorContext context, CassandraStreamingMetrics metrics, CommitLogProcessorMetrics legacyMetrics) {
+        this.metrics = metrics;
+        this.legacyMetrics = legacyMetrics;
         this.queues = context.getQueues();
         this.recordMaker = new RecordMaker(context.getCassandraConnectorConfig().tombstonesOnDelete(),
                 new Filters(context.getCassandraConnectorConfig().fieldExcludeList()),
                 context.getCassandraConnectorConfig());
         this.offsetWriter = context.getOffsetWriter();
         this.schemaHolder = context.getSchemaHolder();
-        this.metrics = metrics;
         this.schemaFactory = CassandraSchemaFactory.get();
         this.eventOrderGuaranteeMode = context.getCassandraConnectorConfig().getEventOrderGuaranteeMode();
     }
@@ -248,6 +251,7 @@ public class Cassandra5CommitLogReadHandlerImpl implements CommitLogReadHandler 
         }
 
         metrics.setCommitLogPosition(entryLocation);
+        legacyMetrics.setCommitLogPosition(entryLocation);
 
         for (PartitionUpdate pu : mutation.getPartitionUpdates()) {
             OffsetPosition offsetPosition = new OffsetPosition(descriptor.fileName(), entryLocation);
@@ -268,12 +272,14 @@ public class Cassandra5CommitLogReadHandlerImpl implements CommitLogReadHandler 
         }
 
         metrics.onSuccess();
+        legacyMetrics.onSuccess();
     }
 
     @Override
     public void handleUnrecoverableError(CommitLogReadException exception) {
         LOGGER.error("Unrecoverable error when reading commit log", exception);
         metrics.onUnrecoverableError();
+        legacyMetrics.onUnrecoverableError();
     }
 
     @Override
